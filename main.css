@@ -1,0 +1,14 @@
+#videos {
+  display: grid;
+  /* Each video will take up half of the container */
+  grid-template-columns: 1fr 1fr;
+  gap: 2em;
+  /* background-color: green; */
+}
+
+.video-player {
+  background-color: black;
+  /* We want to make sure its teh full width of the container  */
+  width: 100%;
+  height: 300px;
+}
