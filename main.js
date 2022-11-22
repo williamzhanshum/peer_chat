@@ -15,6 +15,7 @@ let localStream; // Local camera's video feed and mic audio
 let remoteStream; // Will be the other user's data
 let peerConnection;
 
+// This will set up the stun server.
 const servers = {
   iceServers: [
     {
@@ -35,10 +36,13 @@ let init = async () => {
   await channel.join();
 
   channel.on('MemberJoined', handleUserJoined);
+  // This will listen for the event when a user leaves.
+  channel.on('MemberLeft', handleUserLeft);
 
   // This will response to the offer received.
   client.on('MessageFromPeer', handleMessageFromPeer);
 
+  // This will request access to the video and
   localStream = await navigator.mediaDevices.getUserMedia({
     video: true,
     audio: false,
@@ -46,15 +50,34 @@ let init = async () => {
   document.getElementById('user-1').srcObject = localStream;
 };
 
+// Function that will remove the block when a user leaves.
+let handleUserLeft = (memeberId) => {
+  document.getElementById('user-2').style.display = 'none';
+};
+
 // Function that will handle the message sent from the peer.
 let handleMessageFromPeer = async (message, memeberId) => {
+  //   console.log(`Message: ${message.text}}`);
   message = JSON.parse(message.text);
-  console.log('Message:', message);
+  //   console.log('>>>>>>>>', message);
+  if (message.type === 'offer') {
+    createAnswer(memeberId, message.offer);
+  }
+
+  if (message.type === 'answer') {
+    addAnswer(message.answer);
+  }
+
+  if (message.type === 'candidate') {
+    if (peerConnection) {
+      peerConnection.addIceCandidate(message.candidate);
+    }
+  }
 };
 
 // Funtion that will be called when a new user joins the channel.
 let handleUserJoined = async (memeberId) => {
-  console.log('A new user joined the channel:', memeberId);
+  console.log(`>>> A new user joined the channel: ${memeberId} <<<`);
   createOffer(memeberId);
 };
 
@@ -66,7 +89,12 @@ let createPeerConnection = async (memeberId) => {
   remoteStream = new MediaStream();
   document.getElementById('user-2').srcObject = remoteStream;
 
+  // When user-2 joins, it wil display it as a block element.
+  document.getElementById('user-2').style.display = 'block';
+
+  // To solve the error that appears if the user refreshes the page too fast. When refresh is too fast the local stream might not have yet been created. The if statement belwo is to ensure the local stream is created
   if (!localStream) {
+    // This will ask the user to access their camera.
     localStream = await navigator.mediaDevices.getUserMedia({
       video: true,
       audio: false,
@@ -74,7 +102,7 @@ let createPeerConnection = async (memeberId) => {
     document.getElementById('user-1').srcObject = localStream;
   }
 
-  // This will get the local traks (audio and video) and adds it to the peerConnection so that the peer can get them.
+  // This will get the local tracks (audio and video) and adds it to the peerConnection so that the peer can get them.
   localStream.getTracks().forEach((track) => {
     peerConnection.addTrack(track, localStream);
   });
@@ -86,12 +114,14 @@ let createPeerConnection = async (memeberId) => {
     });
   };
 
+  //This will create an ICE candidate
   peerConnection.onicecandidate = async (event) => {
     if (event.candidate) {
+      console.log(`>>> New ICE candidate: ${event.candidate} <<<`);
       client.sendMessageToPeer(
         {
           text: JSON.stringify({
-            type: 'condidate',
+            type: 'candidate',
             candidate: event.candidate,
           }),
         },
@@ -116,7 +146,7 @@ let createOffer = async (memeberId) => {
   );
 };
 
-// Create Answer
+// Create Answer, this is what is created when the offer is received.
 let createAnswer = async (memeberId, offer) => {
   await createPeerConnection(memeberId);
 
@@ -124,7 +154,28 @@ let createAnswer = async (memeberId, offer) => {
 
   let answer = await peerConnection.createAnswer();
   await peerConnection.setLocalDescription(answer);
+
+  client.sendMessageToPeer(
+    { text: JSON.stringify({ type: 'answer', answer: answer }) },
+    memeberId
+  );
 };
+
+// This function will be the first peer (initiated the offer), they will get back the answer and process it.
+let addAnswer = async (answer) => {
+  if (!peerConnection.currentRemoteDescription) {
+    peerConnection.setRemoteDescription(answer);
+  }
+};
+
+// This will log a user out and leave the channel right away.
+let leaveChannel = async () => {
+  await channel.leave();
+  await client.logout();
+};
+
+// This will add an event listener on the window, so when the user closes the window it will trigger. It will remove the user from the channel right before the window acutally closes.
+window.addEventListener('beforeunload', leaveChannel);
 
 init();
 
