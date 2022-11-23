@@ -10,6 +10,16 @@ let client;
 // Will also need to create a channel, this is what two users will join. Will allow us to send messages to this channel and no info about this specific channel.
 let channel;
 
+// The variables below will get the room id from the url and make sure users need an id to join a ro
+let queryString = window.location.search;
+let urlParams = new URLSearchParams(queryString);
+let roomId = urlParams.get('room');
+
+// the following Makes sure the user has a room ID before they go to specific room. If they do not, it will redirect to lobby.
+if (!roomId) {
+  window.location = 'lobby.html';
+}
+
 // Get access to camera's audio and video
 let localStream; // Local camera's video feed and mic audio
 let remoteStream; // Will be the other user's data
@@ -30,8 +40,7 @@ let init = async () => {
   // 2) Login
   await client.login({ uid, token });
   // 3) Create the channel
-  //    - index.html?room=234234
-  channel = client.createChannel('main');
+  channel = client.createChannel(roomId);
   // 4) Join the channel
   await channel.join();
 
@@ -45,7 +54,7 @@ let init = async () => {
   // This will request access to the video and
   localStream = await navigator.mediaDevices.getUserMedia({
     video: true,
-    audio: false,
+    audio: true,
   });
   document.getElementById('user-1').srcObject = localStream;
 };
@@ -174,8 +183,47 @@ let leaveChannel = async () => {
   await client.logout();
 };
 
+// Toggle between show and no-show camera
+let toggleCamera = async () => {
+  let videoTrack = localStream
+    .getTracks()
+    .find((track) => track.kind === 'video');
+
+  if (videoTrack.enabled) {
+    videoTrack.enabled = false;
+    document.getElementById('camera-btn').style.backgroundColor =
+      'rgb(255,80,80)';
+  } else {
+    videoTrack.enabled = true;
+    document.getElementById('camera-btn').style.backgroundColor =
+      'rgb(179,102,249,.9)';
+  }
+};
+
+// Toggle for the mic
+let toggleMic = async () => {
+  let audioTrack = localStream
+    .getTracks()
+    .find((track) => track.kind === 'audio');
+
+  if (audioTrack.enabled) {
+    audioTrack.enabled = false;
+    document.getElementById('mic-btn').style.backgroundColor = 'rgb(255,80,80)';
+  } else {
+    audioTrack.enabled = true;
+    document.getElementById('mic-btn').style.backgroundColor =
+      'rgb(179,102,249,.9)';
+  }
+};
+
 // This will add an event listener on the window, so when the user closes the window it will trigger. It will remove the user from the channel right before the window acutally closes.
 window.addEventListener('beforeunload', leaveChannel);
+
+// Listens for toggle camera click
+document.getElementById('camera-btn').addEventListener('click', toggleCamera);
+
+// Listens for toggle mic click
+document.getElementById('mic-btn').addEventListener('click', toggleMic);
 
 init();
 
